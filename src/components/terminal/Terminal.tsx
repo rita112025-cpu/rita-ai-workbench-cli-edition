@@ -55,7 +55,17 @@ function loadPref<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
     const v = window.localStorage.getItem(key);
-    return v === null ? fallback : (v as unknown as T);
+    return (v === null ? fallback : (v as unknown as T));
+  } catch {
+    return fallback;
+  }
+}
+function loadBoolPref(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const v = window.localStorage.getItem(key);
+    if (v === null) return fallback;
+    return v === "true";
   } catch {
     return fallback;
   }
@@ -94,7 +104,6 @@ function playClick(soundOn: boolean) {
 export function Terminal() {
   const [cwd, setCwd] = useState("/home/rita");
   const [input, setInput] = useState("");
-  const [ghost, setGhost] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
   const [screen, setScreen] = useState<ScreenLine[]>([]);
@@ -109,11 +118,23 @@ export function Terminal() {
   const screenRef = useRef<HTMLDivElement>(null);
   const blinkRef = useRef<HTMLSpanElement>(null);
 
-  // load persisted prefs
+  // load persisted prefs — one-time mount initialization (legitimate setState-in-effect)
   useEffect(() => {
     setTheme(loadPref<Theme>(LS_THEME, "amber"));
-    setCrt(loadPref(LS_CRT, "true") !== "false");
-    setSound(loadPref(LS_SOUND, "false") !== "false");
+    setCrt(loadBoolPref(LS_CRT, true));
+    setSound(loadBoolPref(LS_SOUND, false));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+  }, []);
+
+  // stable id + output helpers (defined before the boot effect that uses them).
+  // nextId is computed inside the setScreen updater so pushOutput/pushSystem
+  // have genuinely empty dependency arrays (satisfies react-hooks/immutability).
+  const pushOutput = useCallback((lines: OutputLine[]) => {
+    setScreen((s) => [...s, { id: ++idRef.current, kind: "output", lines }]);
+  }, []);
+
+  const pushSystem = useCallback((text: string) => {
+    setScreen((s) => [...s, { id: ++idRef.current, kind: "system", lines: [{ type: "text", text }] }]);
   }, []);
 
   // boot banner
@@ -141,18 +162,7 @@ export function Terminal() {
       { type: "text", text: "" },
     ];
     pushOutput(banner);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booted]);
-
-  const nextId = () => ++idRef.current;
-
-  const pushOutput = useCallback((lines: OutputLine[]) => {
-    setScreen((s) => [...s, { id: nextId(), kind: "output", lines }]);
-  }, []);
-
-  const pushSystem = useCallback((text: string) => {
-    setScreen((s) => [...s, { id: nextId(), kind: "system", lines: [{ type: "text", text }] }]);
-  }, []);
+  }, [booted, pushOutput]);
 
   // auto-scroll to bottom
   useEffect(() => {
@@ -190,21 +200,16 @@ export function Terminal() {
     return [...cmds, ...allProjectIds()];
   }, []);
 
-  // compute ghost suggestion as the user types
-  useEffect(() => {
+  // ghost suggestion is derived state, not an effect: compute it directly
+  // from `input` so there are no cascading setState calls.
+  const ghost = useMemo(() => {
     const v = input.trim();
-    if (!v) {
-      setGhost("");
-      return;
-    }
-    // single-token completion only
-    if (v.includes(" ")) {
-      setGhost("");
-      return;
-    }
+    if (!v || v.includes(" ")) return "";
     const lower = v.toLowerCase();
-    const hit = completionCandidates.find((c) => c.toLowerCase().startsWith(lower) && c.toLowerCase() !== lower);
-    setGhost(hit ? hit.slice(v.length) : "");
+    const hit = completionCandidates.find(
+      (c) => c.toLowerCase().startsWith(lower) && c.toLowerCase() !== lower
+    );
+    return hit ? hit.slice(v.length) : "";
   }, [input, completionCandidates]);
 
   const applyTheme = useCallback((next: Theme) => {
@@ -299,14 +304,12 @@ export function Terminal() {
       e.preventDefault();
       runCommand(input);
       setInput("");
-      setGhost("");
       return;
     }
     if (e.key === "Tab") {
       e.preventDefault();
       if (ghost) {
         setInput((v) => v + ghost);
-        setGhost("");
       }
       return;
     }
@@ -343,7 +346,6 @@ export function Terminal() {
         setScreen((s) => [...s, { id: nextId(), kind: "input", cwd, command: cmd + " ^C" }]);
       }
       setInput("");
-      setGhost("");
       return;
     }
   };

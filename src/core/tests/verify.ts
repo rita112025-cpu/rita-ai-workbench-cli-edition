@@ -81,10 +81,11 @@ function assertEq<T>(actual: T, expected: T, name: string): void {
 function assertMatch<T>(actual: T, shape: Partial<T>, name: string): void {
   let okFlag = true;
   for (const k of Object.keys(shape as object)) {
-    // @ts-expect-error dynamic
-    if (!Object.is(actual?.[k], shape[k])) {
+    const av = (actual as Record<string, unknown>)?.[k];
+    const sv = (shape as Record<string, unknown>)[k];
+    if (!Object.is(av, sv)) {
       okFlag = false;
-      console.log(`        field ${k}: expected ${JSON.stringify(shape[k])}, got ${JSON.stringify(actual?.[k])}`);
+      console.log(`        field ${k}: expected ${JSON.stringify(sv)}, got ${JSON.stringify(av)}`);
     }
   }
   assert(okFlag, name);
