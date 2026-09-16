@@ -419,6 +419,18 @@ body { margin: 0; background: #000; overflow: hidden; }
   width: 1px;
   height: 1px;
 }
+/* the input itself is off-screen, so show focus on the active prompt line instead */
+.term-root:focus-within #term-active-line {
+  outline: 1px solid color-mix(in srgb, var(--term-fg) 70%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term-crt-overlay,
+  .term-cursor {
+    animation: none !important;
+  }
+}
 
 /* sticky footer */
 .term-footer {

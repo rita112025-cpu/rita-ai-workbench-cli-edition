@@ -438,7 +438,6 @@ const neofetchHandler: Handler = (_args, ctx) => {
     kv("mode", "portfolio"),
     kv("runtime", "browser"),
     kv("storage", "local"),
-    kv("host", "GitHub Pages"),
   ]);
 };
 
@@ -447,8 +446,8 @@ const themeHandler: Handler = (args) => {
   if (t !== "amber" && t !== "green" && t !== "white") {
     return fail("INVALID_THEME", `theme: invalid value '${args[0] ?? ""}'. usage: theme <amber|green|white>`);
   }
-  // theme application is a UI concern; engine returns the chosen value via output.
-  return ok([text(`theme: switching to ${t} (200ms fade)…`), kv("theme", t)]);
+  // theme application is a UI concern; engine returns the chosen value via nextState.prefs.
+  return ok([text(`theme: switching to ${t} (200ms fade)…`), kv("theme", t)], { prefs: { theme: t } });
 };
 
 const crtHandler: Handler = (args) => {
@@ -456,7 +455,7 @@ const crtHandler: Handler = (args) => {
   if (v !== "on" && v !== "off") {
     return fail("INVALID_ARG", `crt: invalid value '${args[0] ?? ""}'. usage: crt <on|off>`);
   }
-  return ok([kv("crt", v)]);
+  return ok([kv("crt", v)], { prefs: { crt: v === "on" } });
 };
 
 const soundHandler: Handler = (args) => {
@@ -464,7 +463,7 @@ const soundHandler: Handler = (args) => {
   if (v !== "on" && v !== "off") {
     return fail("INVALID_ARG", `sound: invalid value '${args[0] ?? ""}'. usage: sound <on|off>`);
   }
-  return ok([kv("sound", v)]);
+  return ok([kv("sound", v)], { prefs: { sound: v === "on" } });
 };
 
 const mkdirHandler: Handler = (args, ctx) => {
@@ -509,7 +508,7 @@ const aboutHandler: Handler = () => {
 /* Registry + dispatch                                                */
 /* ------------------------------------------------------------------ */
 
-const HANDLERS: Record<string, Handler> = {
+const HANDLERS: Record<string, Handler> = Object.assign(Object.create(null), {
   help: helpHandler,
   ls: lsHandler,
   cd: cdHandler,
@@ -536,7 +535,7 @@ const HANDLERS: Record<string, Handler> = {
   mkdir: mkdirHandler,
   rm: rmHandler,
   about: aboutHandler,
-};
+});
 
 export function executeCommand(input: string, ctx: DispatchContext): CommandResult {
   const parsed = parseCommand(input);

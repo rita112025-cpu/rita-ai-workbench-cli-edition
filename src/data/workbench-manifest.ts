@@ -25,6 +25,8 @@
  *   - Skills / Workflows views are DERIVED from project tags, not fabricated.
  */
 
+import { deepFreeze } from "@/core/deep-freeze";
+
 export type ToolStatus = "常用" | "可用" | "整理中" | "研究中";
 
 export interface ProvenanceMeta {
@@ -106,15 +108,15 @@ const META_README: ProvenanceMeta = {
 /* System & About                                                     */
 /* ------------------------------------------------------------------ */
 
-export const SYSTEM: SystemInfo = {
+export const SYSTEM: SystemInfo = deepFreeze({
   name: "Rita AI Workbench",
   version: "CLI Edition v1.0",
   filesystemVersion: 1,
   sourceRepo: "https://github.com/rita112025-cpu/rita-ai-workbench",
   _meta: META_README,
-};
+});
 
-export const ABOUT: AboutInfo = {
+export const ABOUT: AboutInfo = deepFreeze({
   title: "Rita AI 工作台",
   subtitle: "CLI Edition v1.0",
   owner: OWNER,
@@ -140,13 +142,13 @@ export const ABOUT: AboutInfo = {
     demo: null,
   },
   _meta: META_README,
-};
+});
 
 /* ------------------------------------------------------------------ */
 /* Projects (43 — verbatim from repo app.js `tools` array)            */
 /* ------------------------------------------------------------------ */
 
-export const PROJECTS: Project[] = [
+export const PROJECTS: Project[] = deepFreeze([
   { id: "prompt-library", name: "PROMPT-LIBRARY", repo: "PROMPT-LIBRARY", owner: "rita112025-cpu", category: "常用 Prompt", description: "集中管理常用 Prompt。", detail: "放置可重複使用的 Prompt，例如工作分析、報告整理、程式審查、工具規劃等。", tags: ["Prompt", "Library", "AI 工作流"], status: "常用", links: { github: "https://github.com/rita112025-cpu/PROMPT-LIBRARY", demo: "https://rita112025-cpu.github.io/PROMPT-LIBRARY/" }, _meta: META_TOOL },
   { id: "gpt6-astra-prompts", name: "gpt6-astra-prompts", repo: "gpt6-astra-prompts", owner: "rita112025-cpu", category: "常用 Prompt", description: "Astra / GPT-6 相關提示詞整理。", detail: "整理 GPT-6 Astra 使用場景、工具連接、工作流程與進階 Prompt。", tags: ["GPT-6", "Astra", "Prompt"], status: "可用", links: { github: "https://github.com/rita112025-cpu/gpt6-astra-prompts", demo: "https://rita112025-cpu.github.io/gpt6-astra-prompts/" }, _meta: META_TOOL },
   { id: "ai-prompt-deck", name: "ai-prompt-deck", repo: "ai-prompt-deck", owner: "rita112025-cpu", category: "常用 Prompt", description: "AI Prompt 簡報與教材素材。", detail: "適合整理成教學、簡報或內部分享內容。", tags: ["Prompt", "Deck", "教材"], status: "可用", links: { github: "https://github.com/rita112025-cpu/ai-prompt-deck", demo: "https://rita112025-cpu.github.io/ai-prompt-deck/" }, _meta: META_TOOL },
@@ -197,7 +199,7 @@ export const PROJECTS: Project[] = [
   { id: "japan-travel", name: "japan_travel", repo: "japan_travel", owner: "rita112025-cpu", category: "生活 / 其他", description: "沖繩自駕行程 PWA。", detail: "沖繩南國自駕慢遊行程表，離線可用、可加入手機主畫面。", tags: ["PWA", "沖繩", "自駕"], status: "可用", links: { github: "https://github.com/rita112025-cpu/japan_travel", demo: "https://rita112025-cpu.github.io/japan_travel/" }, _meta: META_TOOL },
   { id: "japan-travel-meta", name: "japan_travel_meta", repo: "japan_travel_meta", owner: "rita112025-cpu", category: "生活 / 其他", description: "沖繩自駕行程 PWA・可愛版。", detail: "同一份沖繩行程的可愛版視覺，離線可用、可加入手機主畫面。", tags: ["PWA", "沖繩", "改版"], status: "可用", links: { github: "https://github.com/rita112025-cpu/japan_travel_meta", demo: "https://rita112025-cpu.github.io/japan_travel_meta/" }, _meta: META_TOOL },
   { id: "yijing", name: "yijing", repo: "yijing", owner: "rita112025-cpu", category: "生活 / 其他", description: "易經象徵性解讀工具。", detail: "僅供個人自我反思參考，不構成醫療、法律、財務或心理診斷建議。", tags: ["易經", "自我反思", "工具"], status: "可用", links: { github: "https://github.com/rita112025-cpu/yijing", demo: "https://rita112025-cpu.github.io/yijing/" }, _meta: META_TOOL },
-];
+]);
 
 /* ------------------------------------------------------------------ */
 /* Derived helpers (no fabricated data — built FROM the manifest)     */

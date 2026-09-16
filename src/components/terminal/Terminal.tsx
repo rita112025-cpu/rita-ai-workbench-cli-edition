@@ -190,10 +190,14 @@ export function Terminal() {
   }, []);
   const focusInput = () => inputRef.current?.focus();
 
-  // cursor blink at 1.06s
+  // cursor blink at 1.06s — skipped when the user prefers reduced motion
   useEffect(() => {
     const el = blinkRef.current;
     if (!el) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      el.style.visibility = "visible";
+      return;
+    }
     let on = true;
     const iv = window.setInterval(() => {
       on = !on;
@@ -249,25 +253,19 @@ export function Terminal() {
       const ctx = { cwd, theme, crt, sound };
       const result: CommandResult = executeCommand(cmd, ctx);
 
-      // theme switch
-      const themeMatch = cmd.match(/^theme\s+(\w+)/i);
-      if (themeMatch) {
-        const t = themeMatch[1].toLowerCase();
-        if (t === "amber" || t === "green" || t === "white") {
-          applyTheme(t);
+      // preference changes come from the engine's own parse/validation —
+      // never re-derived from the raw command string, and only applied on success.
+      if (result.ok && result.nextState.prefs) {
+        const { theme: nextTheme, crt: nextCrt, sound: nextSound } = result.nextState.prefs;
+        if (nextTheme) applyTheme(nextTheme);
+        if (nextCrt !== undefined) {
+          setPrefs((p) => ({ ...p, crt: nextCrt }));
+          savePref(LS_CRT, nextCrt ? "true" : "false");
         }
-      }
-      const crtMatch = cmd.match(/^crt\s+(\w+)/i);
-      if (crtMatch) {
-        const v = crtMatch[1].toLowerCase() === "on";
-        setPrefs((p) => ({ ...p, crt: v }));
-        savePref(LS_CRT, v ? "true" : "false");
-      }
-      const soundMatch = cmd.match(/^sound\s+(\w+)/i);
-      if (soundMatch) {
-        const v = soundMatch[1].toLowerCase() === "on";
-        setPrefs((p) => ({ ...p, sound: v }));
-        savePref(LS_SOUND, v ? "true" : "false");
+        if (nextSound !== undefined) {
+          setPrefs((p) => ({ ...p, sound: nextSound }));
+          savePref(LS_SOUND, nextSound ? "true" : "false");
+        }
       }
 
       if (result.nextState.clearScreen) {
@@ -290,12 +288,17 @@ export function Terminal() {
       }
       // execute approved action (URL allowlist enforced by engine)
       if (result.action && result.action.type === "OPEN_URL") {
-        pushSystem(`↗ opening ${result.action.linkType}: ${result.action.url}`);
+        // `noopener` makes window.open() return null unconditionally per the
+        // HTML spec, so its return value can't be used to detect a blocked
+        // popup — keep the security flag, don't claim a fact we can't observe.
         try {
           window.open(result.action.url, "_blank", "noopener,noreferrer");
         } catch {
-          pushSystem(`(popup blocked — copy URL manually)`);
+          /* rare (e.g. an extension intercepting the call) — the neutral
+             message below still applies either way */
         }
+        pushSystem(`opening ${result.action.linkType} for ${result.action.projectId}`);
+        pushSystem(`if no new tab appears, allow pop-ups for this site or use: ${result.action.url}`);
       }
     },
     [cwd, theme, crt, sound, applyTheme, pushSystem]
@@ -320,8 +323,10 @@ export function Terminal() {
       return;
     }
     if (e.key === "Tab") {
-      e.preventDefault();
-      if (ghost) {
+      // Only swallow Tab when there's a completion to apply; otherwise let
+      // it move focus normally so keyboard users can leave the terminal.
+      if (ghost && !e.shiftKey) {
+        e.preventDefault();
         setInput((v) => v + ghost);
       }
       return;

@@ -37,6 +37,7 @@ export interface CommandResult {
     clearScreen?: boolean;
     enterPager?: boolean;
     pagerContent?: string;
+    prefs?: Partial<{ theme: "amber" | "green" | "white"; crt: boolean; sound: boolean }>;
   };
   action: OpenUrlAction | null;
 }

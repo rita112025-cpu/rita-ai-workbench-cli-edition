@@ -12,6 +12,7 @@
  */
 
 import type { ProvenanceMeta } from "./workbench-manifest";
+import { deepFreeze } from "@/core/deep-freeze";
 
 export interface ResearchProject {
   id: string;
@@ -42,7 +43,7 @@ const META_REACH: ProvenanceMeta = {
   lastCheckedAt: null,
 };
 
-export const RESEARCH_PROJECTS: ResearchProject[] = [
+export const RESEARCH_PROJECTS: ResearchProject[] = deepFreeze([
   {
     id: "scrapling",
     name: "Scrapling parsing and adaptive extraction layer",
@@ -73,7 +74,7 @@ export const RESEARCH_PROJECTS: ResearchProject[] = [
     contentFile: "agent-reach.md",
     _meta: META_REACH,
   },
-];
+]);
 
 export function findResearchById(id: string): ResearchProject | undefined {
   return RESEARCH_PROJECTS.find((r) => r.id === id || r.name === id);

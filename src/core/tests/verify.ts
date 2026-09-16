@@ -40,7 +40,7 @@ if (typeof globalThis.window === "undefined") {
 }
 
 // --- imports under test ----------------------------------------------
-import { PROJECTS, MANIFEST_ASSERTIONS, findProjectById } from "@/data/workbench-manifest";
+import { PROJECTS, ABOUT, SYSTEM, MANIFEST_ASSERTIONS, findProjectById, type Project } from "@/data/workbench-manifest";
 import { RESEARCH_PROJECTS, findResearchById } from "@/data/research-manifest";
 import { readPath, mkdir, rm } from "@/core/vfs/build-vfs";
 import { isReadOnly, isWritable } from "@/core/vfs/permissions";
@@ -218,12 +218,136 @@ console.log("\n[10] bonus: duplicate id / malformed url / traversal variants");
   // excessive whitespace + quotes -> deterministic parse
   const p = parseCommand('   cat    "my   file.md"   ');
   assert(!!p && p.name === "cat" && p.args.length === 1 && p.args[0] === "my   file.md", "31 whitespace/quotes parse deterministically");
-  // command handler cannot mutate canonical manifest
+  // command handler cannot mutate canonical manifest (via the rejected-command path)
   const before = JSON.stringify(findProjectById("yijing"));
   executeCommand("rm /projects/yijing", { cwd: CWD, theme: "amber", crt: true, sound: false });
   executeCommand("mkdir /projects/yijing", { cwd: CWD, theme: "amber", crt: true, sound: false });
   const after = JSON.stringify(findProjectById("yijing"));
   assertEq(after, before, "32 manifest immutable across write attempts");
+
+  // PROJECTS is actually frozen — not just unreachable by the two commands above.
+  const yijing = findProjectById("yijing")!;
+  const originalDemo = yijing.links.demo;
+  const originalLength = PROJECTS.length;
+  try {
+    (yijing.links as { demo: string | null }).demo = "https://evil.example";
+  } catch {
+    /* strict mode throws on frozen write — expected */
+  }
+  assertEq(yijing.links.demo, originalDemo, "32b direct write to PROJECTS[].links is a no-op (frozen)");
+  try {
+    (yijing as { id: string }).id = "hijacked";
+  } catch {
+    /* expected under strict mode */
+  }
+  assertEq(yijing.id, "yijing", "32c direct write to PROJECTS[].id is a no-op (frozen)");
+  try {
+    (PROJECTS as unknown as Project[]).push({ ...yijing, id: "injected" });
+  } catch {
+    /* Array.prototype.push on a frozen array throws under strict mode — expected */
+  }
+  assertEq(PROJECTS.length, originalLength, "32d PROJECTS.push is a no-op (frozen)");
+
+  // direct isFrozen check — this is what actually fails the moment someone
+  // deletes deepFreeze(...) from a manifest export, unlike 32/32b-d above
+  // which only observe *effects* and could pass by coincidence.
+  const allManifestsFrozen =
+    Object.isFrozen(PROJECTS) &&
+    PROJECTS.every((p) => Object.isFrozen(p) && Object.isFrozen(p.links) && Object.isFrozen(p._meta)) &&
+    Object.isFrozen(ABOUT) &&
+    Object.isFrozen(ABOUT.links) &&
+    Object.isFrozen(SYSTEM) &&
+    Object.isFrozen(RESEARCH_PROJECTS) &&
+    RESEARCH_PROJECTS.every((r) => Object.isFrozen(r) && Object.isFrozen(r._meta));
+  assert(allManifestsFrozen, "32e PROJECTS/ABOUT/SYSTEM/RESEARCH_PROJECTS are deep-frozen");
+}
+
+console.log("\n[11] prototype-key command names do not break the CommandResult shape");
+{
+  const protoKeys = ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"];
+  for (const key of protoKeys) {
+    const r = executeCommand(key, { cwd: CWD, theme: "amber", crt: true, sound: false });
+    const shapeOk = typeof r.ok === "boolean" && Array.isArray(r.output) && typeof r.nextState === "object" && r.nextState !== null;
+    assert(shapeOk, `33 '${key}' returns a well-shaped CommandResult`, JSON.stringify(r));
+  }
+}
+
+console.log("\n[12] theme/crt/sound: engine result and nextState.prefs never diverge");
+{
+  const rejectCases = ["crt onx", "sound yes", "theme bogus"];
+  for (const cmd of rejectCases) {
+    const r = executeCommand(cmd, { cwd: CWD, theme: "amber", crt: true, sound: false });
+    assert(!r.ok && !r.nextState.prefs, `34 rejected '${cmd}' carries no prefs change`, JSON.stringify(r.nextState));
+  }
+  const acceptCases: [string, Record<string, unknown>][] = [
+    ["crt on", { crt: true }],
+    ["theme amber", { theme: "amber" }],
+    // pinned regression case: the old UI regex (`/^theme\s+(\w+)/i`) could not
+    // match a quoted arg, so it silently failed to apply a theme the engine
+    // had already accepted. The engine-only parser must get this right.
+    ['theme "amber"', { theme: "amber" }],
+    ["theme  amber", { theme: "amber" }],
+    ["sound on", { sound: true }],
+  ];
+  for (const [cmd, expected] of acceptCases) {
+    const r = executeCommand(cmd, { cwd: CWD, theme: "amber", crt: true, sound: false });
+    assertMatch(r.nextState.prefs, expected, `35 accepted '${cmd}' carries correct prefs`);
+  }
+}
+
+console.log("\n[13b] demo action.url strictly matches the manifest for every project");
+{
+  let mismatches = 0;
+  for (const p of PROJECTS) {
+    const r = executeCommand(`demo ${p.id}`, { cwd: CWD, theme: "amber", crt: true, sound: false });
+    if (p.links.demo === null) {
+      if (r.action !== null) mismatches++;
+    } else if (!r.action || r.action.url !== p.links.demo) {
+      mismatches++;
+    }
+  }
+  assert(mismatches === 0, "37 demo action.url === manifest links.demo for all 43 projects", `${mismatches} mismatch(es)`);
+}
+
+console.log("\n[14] VFS writable-tree lookups do not fall through Object.prototype");
+{
+  const protoNames = ["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"];
+  for (const name of protoNames) {
+    const rmRes = executeCommand(`rm /home/rita/${name}`, { cwd: CWD, theme: "amber", crt: true, sound: false });
+    assert(!rmRes.ok && rmRes.error?.code === "NOT_FOUND", `38 rm on nonexistent prototype-key name '${name}' -> NOT_FOUND`, JSON.stringify(rmRes));
+
+    const mkRes = executeCommand(`mkdir /home/rita/${name}`, { cwd: CWD, theme: "amber", crt: true, sound: false });
+    assert(mkRes.ok, `39 mkdir on prototype-key name '${name}' succeeds`, JSON.stringify(mkRes));
+
+    const lsRes = executeCommand(`ls /home/rita`, { cwd: CWD, theme: "amber", crt: true, sound: false });
+    const items = lsRes.ok ? lsRes.output.flatMap((l) => l.items ?? []) : [];
+    assert(items.includes(`${name}/`), `39b '${name}' is visible in ls /home/rita after mkdir`, JSON.stringify(items));
+
+    executeCommand(`rm /home/rita/${name}`, { cwd: CWD, theme: "amber", crt: true, sound: false });
+  }
+}
+
+console.log("\n[15] neofetch reports no unverified claims");
+{
+  const r = executeCommand("neofetch", { cwd: CWD, theme: "amber", crt: true, sound: false });
+  // exact key-set check, not a substring scan: a substring match only catches
+  // this one regression ("host") and would false-fail on any future field
+  // whose value happens to contain that word.
+  const keySet = new Set(
+    r.output.filter((l): l is typeof l & { k: string } => l.type === "kv" && typeof l.k === "string").map((l) => l.k)
+  );
+  const expectedKeys = [
+    "OS", "version", "shell", "theme", "crt", "sound",
+    "projects", "research", "with-demo", "mode", "runtime", "storage",
+  ];
+  const expectedSet = new Set(expectedKeys);
+  const added = [...keySet].filter((k) => !expectedSet.has(k));
+  const missing = expectedKeys.filter((k) => !keySet.has(k));
+  assert(
+    added.length === 0 && missing.length === 0,
+    "36 neofetch kv keys match the expected set exactly (no added deployment claim)",
+    `added=${JSON.stringify(added)} missing=${JSON.stringify(missing)}`
+  );
 }
 
 /* ------------------------------------------------------------------ */

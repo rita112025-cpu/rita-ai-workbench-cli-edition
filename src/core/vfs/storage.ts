@@ -19,14 +19,18 @@ export type WritableTree = Record<string, WritableEntry>;
 
 /** SSR-safe load. Returns empty tree outside the browser. */
 export function loadWritable(): WritableTree {
-  if (typeof window === "undefined") return {};
+  if (typeof window === "undefined") return Object.create(null);
   try {
     const raw = window.localStorage.getItem(LS_KEY);
-    if (!raw) return {};
+    if (!raw) return Object.create(null);
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? (parsed as WritableTree) : {};
+    // Null-prototype so key lookups (tree[k], k in tree) never fall through
+    // to Object.prototype members like "constructor" or "toString".
+    return parsed && typeof parsed === "object"
+      ? Object.assign(Object.create(null), parsed)
+      : Object.create(null);
   } catch {
-    return {};
+    return Object.create(null);
   }
 }
 
