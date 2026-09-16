@@ -36,3 +36,38 @@ Stage Summary:
 - Provenance honest: githubLinkVerified/demoLinkVerified = false (links NOT yet live-checked). A separate link-verification phase must flip these.
 - Architecture: manifest → research manifest → VFS → shared resolver → command engine → (next: Terminal UI).
 - Verified content (43 projects + 2 research sub-projects) sourced from the cloned repo, not invented.
+
+---
+Task ID: 7-9 (UI + verification)
+Agent: main (Z.ai Code)
+Task: Build Terminal UI rendering structured CommandResult output; run final verification (core, lint, tsc, dev HTML, browser E2E golden path + safety + responsive + persistence, link verification).
+
+Work Log:
+- Refactored Terminal.tsx: ghost completion → useMemo (derived state, removed setGhost); boot banner → useState lazy initializer (no mount effect); theme/crt/sound → single `prefs` state object with one scoped eslint-disable for hydration.
+- OutputRenderer renders structured OutputLine[] as JSX text nodes — no dangerouslySetInnerHTML in any Rita Workbench code (the 1 match is a doc comment; the other is the pre-existing shadcn chart.tsx, unused here).
+- window.open is gated exclusively behind `result.action.type === "OPEN_URL"`, which is produced only by resolveProjectLink from the manifest allowlist.
+- Verified all gates: lint PASS (0 problems), core invariants 39/39 PASS, TypeScript 0 src errors.
+- Dev server (pid 6920) returns HTTP 200 with terminal markup (term-page, term-root, "Rita AI Workbench", "System ready", term-topbar).
+- Browser E2E (Agent Browser via preview host) — ALL PASS:
+  * Page renders: title "Rita AI Workbench — CLI Edition", topbar, boot banner, term-root ✓
+  * Golden path: projects (shows prompt-library/yijing), help pager (q to exit), cat projects/yijing/README.md (易經 content), cat /research/scrapling/README.md (Scrapling), search revit (hit), neofetch (GitHub Pages), cd /projects + ls, whoami (rita) ✓
+  * run yijing: shows "executable" field, NO fabricated ✓Running/Connected/Analysis complete ✓
+  * Safety: demo javascript:alert(1) → URL_NOT_ALLOWED; open https://evil.example → URL_NOT_ALLOWED; rm /projects → READ_ONLY_FILESYSTEM; mkdir /system/foo → READ_ONLY_FILESYSTEM ✓
+  * Tab completion: type 'proj' → ghost 'ects' → Tab → 'projects' ✓
+  * History: ↑ navigates to previous commands ✓
+  * VFS writable: mkdir/rm /home/rita/test works; dirs persist+list ✓
+  * Malformed localStorage → graceful fallback, no white screen ✓
+  * Persistence: theme green + crt off survive reload (data-theme/data-crt attrs + localStorage) ✓
+  * demo yijing opens real new tab to rita112025-cpu.github.io/yijing/ ✓
+  * Theme switch white→amber works ✓
+  * Responsive: 320/390/768/1280px all NO horizontal overflow; 7 chips + footer visible at 320px ✓
+  * Console: clean (only HMR + React DevTools info); 0 page errors ✓
+- Link verification (scripts/verify-links.ts, reads manifest URLs only):
+  * GitHub URLs: 43 PASS / 0 FAIL / 0 N/A (all HTTP 200)
+  * Demo URLs: 29 PASS / 0 FAIL / 14 N/A (14 projects have links.demo === null — correctly represented, not failures)
+- No project status changed due to link results (status stays as the repo's original value).
+
+Stage Summary:
+- All V1 verification items actually ran and passed.
+- Production build NOT run (project constraint forbids `bun run build`); TypeScript --noEmit used as typecheck proxy (0 src errors).
+- The _meta.githubLinkVerified/demoLinkVerified flags remain false in the manifest source (no application-code mutation during verification); the live link-check PASS/FAIL is reported separately in the verification report and could be backfilled in a future pass.
