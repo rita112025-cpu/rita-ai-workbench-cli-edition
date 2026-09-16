@@ -71,3 +71,28 @@ Stage Summary:
 - All V1 verification items actually ran and passed.
 - Production build NOT run (project constraint forbids `bun run build`); TypeScript --noEmit used as typecheck proxy (0 src errors).
 - The _meta.githubLinkVerified/demoLinkVerified flags remain false in the manifest source (no application-code mutation during verification); the live link-check PASS/FAIL is reported separately in the verification report and could be backfilled in a future pass.
+
+---
+Task ID: 10 (hardening pass — commit 62463b9)
+Agent: Claude Sonnet 5 (Claude Code)
+Task: Fix prototype-pollution crashes, engine/UI parser drift, and an unverified deployment claim found during an independent review pass; land as a reviewed, pushed commit.
+
+Work Log:
+- HANDLERS in execute-command.ts made a null-prototype dict (was a plain object literal) — command names matching Object.prototype members (`constructor`, `__proto__`, `toString`, ...) no longer resolve to a prototype method and crash the terminal.
+- storage.ts's loadWritable() now returns a null-prototype tree — mkdir/rm on prototype-key paths under /home/rita no longer give false ALREADY_EXISTS/removed results.
+- theme/crt/sound preference changes now flow through CommandResult.nextState.prefs from the engine; removed the UI-side regex re-parser in Terminal.tsx that could diverge from the engine's own validation (e.g. `theme "amber"` — a quoted arg — used to be accepted by the engine but silently ignored by the UI's regex).
+- PROJECTS/ABOUT/SYSTEM/RESEARCH_PROJECTS deep-frozen (src/core/deep-freeze.ts) so the "nothing mutates the manifest" invariant the URL allowlist depends on is enforced at runtime, not just assumed.
+- Removed the hard-coded `neofetch` `host: "GitHub Pages"` claim — nothing in this repo (no next.config output:"export", no .github/workflows) actually supports it.
+- Fixed a popup-blocked UI bug: `window.open(url, "_blank", "noopener,noreferrer")` returns null unconditionally per spec when `noopener` is set, so checking the return value to report "blocked" was misreporting every *successful* open as blocked. Now shows a neutral "opening ..." message plus a non-committal fallback line; `noopener,noreferrer` kept.
+- Fixed a keyboard trap: Tab only intercepts focus when a ghost completion is available; otherwise focus moves to the next element (verified via document.activeElement in a real browser, both Tab and Shift+Tab).
+- Added `prefers-reduced-motion` handling (CSS media query + a matchMedia check gating the JS-driven cursor-blink interval) and a visible focus outline for the off-screen input.
+- Expanded src/core/tests/verify.ts from 39 to 73 assertions. An independent review session mutation-tested the six fixes in this pass against the actual staged blobs — reverting each fix one at a time confirmed the corresponding assertions go red. The remaining assertions pass but were not individually mutation-tested.
+
+Stage Summary:
+- lint: 0 errors/warnings on the 8 changed source files (2 pre-existing errors in unrelated shadcn scaffold files, untouched).
+- TypeScript: `npx tsc --noEmit` clean for this round's files; 2 pre-existing errors remain in `examples/websocket/*` (missing `socket.io`/`socket.io-client` type declarations) — unrelated, not introduced or fixed this round.
+- `npm run verify:core` equivalent (73 assertions): PASS.
+- `next build` run for the first time in this project's history: succeeds, produces `.next/standalone/server.js`. Note: this build has `typescript.ignoreBuildErrors: true` in next.config.ts, so it explicitly skips type-checking ("Skipping validation of types") — its success says nothing about whether the project type-checks cleanly. Given the 2 pre-existing examples/websocket errors are in tsconfig's include scope, removing ignoreBuildErrors would likely break the build until those are fixed or excluded.
+- NOT verified: `prefers-reduced-motion` was not exercised under actual OS/browser emulation (only code-reviewed; the available browser tooling could only emulate light/dark color-scheme). A real popup actually opening a new tab was not directly observed — the browser tooling used for verification blocks popups triggered by synthetic (non-human) input, so only the correct target URL and the absence of a false "blocked" claim were confirmed.
+- Dependency install for this verification round was resolved by `npm install` (produced node_modules + a since-deleted package-lock.json), not `bun install` — this repo's tracked lockfile is `bun.lock`, which was not touched.
+- `next.config.ts`'s `typescript.ignoreBuildErrors` and `output: "standalone"` are unchanged and remain an open decision, not addressed in this pass.
