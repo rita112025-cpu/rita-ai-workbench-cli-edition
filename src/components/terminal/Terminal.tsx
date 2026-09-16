@@ -101,34 +101,71 @@ function playClick(soundOn: boolean) {
   }
 }
 
+interface Prefs {
+  theme: Theme;
+  crt: boolean;
+  sound: boolean;
+}
+const DEFAULT_PREFS: Prefs = { theme: "amber", crt: true, sound: false };
+
+function loadPreferences(): Prefs {
+  return {
+    theme: loadPref<Theme>(LS_THEME, "amber"),
+    crt: loadBoolPref(LS_CRT, true),
+    sound: loadBoolPref(LS_SOUND, false),
+  };
+}
+
+function createBootLines(): OutputLine[] {
+  return [
+    { type: "heading", text: `${SYSTEM.name}`, level: 1 },
+    { type: "text", text: SYSTEM.version },
+    { type: "text", text: "" },
+    { type: "text", text: "AI-assisted tools, workflows and experiments." },
+    { type: "text", text: "" },
+    { type: "text", text: "System ready." },
+    { type: "text", text: "" },
+    { type: "text", text: "Try:" },
+    { type: "list", items: [
+      "projects            browse projects",
+      "skills              inspect reusable skills",
+      "workflows           view AI workflows",
+      "research            browse research",
+      "demo yijing         launch a live project",
+      "search automation    search the workbench",
+      "help                 command reference",
+    ] },
+    { type: "text", text: "" },
+  ];
+}
+
 export function Terminal() {
   const [cwd, setCwd] = useState("/home/rita");
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
-  const [screen, setScreen] = useState<ScreenLine[]>([]);
-  const [theme, setTheme] = useState<Theme>("amber");
-  const [crt, setCrt] = useState(true);
-  const [sound, setSound] = useState(false);
+  // boot banner is fixed init content → lazy initializer (no effect, no lint issue)
+  const [screen, setScreen] = useState<ScreenLine[]>(() => [
+    { id: 1, kind: "output", lines: createBootLines() },
+  ]);
+  // prefs default to safe SSR values; restored from localStorage after hydration
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [fading, setFading] = useState(false);
   const [pager, setPager] = useState<{ content: OutputLine[] } | null>(null);
-  const [booted, setBooted] = useState(false);
-  const idRef = useRef(0);
+  const idRef = useRef(1); // boot line already consumed id 1
   const inputRef = useRef<HTMLInputElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
   const blinkRef = useRef<HTMLSpanElement>(null);
+  const { theme, crt, sound } = prefs;
 
-  // load persisted prefs — one-time mount initialization (legitimate setState-in-effect)
+  // restore persisted browser preferences after mount (single scoped exception).
   useEffect(() => {
-    setTheme(loadPref<Theme>(LS_THEME, "amber"));
-    setCrt(loadBoolPref(LS_CRT, true));
-    setSound(loadBoolPref(LS_SOUND, false));
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPrefs(loadPreferences());
   }, []);
 
-  // stable id + output helpers (defined before the boot effect that uses them).
-  // nextId is computed inside the setScreen updater so pushOutput/pushSystem
-  // have genuinely empty dependency arrays (satisfies react-hooks/immutability).
+  // stable output helpers — nextId computed inside the setScreen updater
+  // so these callbacks have genuinely empty dependency arrays.
   const pushOutput = useCallback((lines: OutputLine[]) => {
     setScreen((s) => [...s, { id: ++idRef.current, kind: "output", lines }]);
   }, []);
@@ -137,32 +174,8 @@ export function Terminal() {
     setScreen((s) => [...s, { id: ++idRef.current, kind: "system", lines: [{ type: "text", text }] }]);
   }, []);
 
-  // boot banner
-  useEffect(() => {
-    if (booted) return;
-    setBooted(true);
-    const banner: OutputLine[] = [
-      { type: "heading", text: `${SYSTEM.name}`, level: 1 },
-      { type: "text", text: SYSTEM.version },
-      { type: "text", text: "" },
-      { type: "text", text: "AI-assisted tools, workflows and experiments." },
-      { type: "text", text: "" },
-      { type: "text", text: "System ready." },
-      { type: "text", text: "" },
-      { type: "text", text: "Try:" },
-      { type: "list", items: [
-        "projects            browse projects",
-        "skills              inspect reusable skills",
-        "workflows           view AI workflows",
-        "research            browse research",
-        "demo yijing         launch a live project",
-        "search automation    search the workbench",
-        "help                 command reference",
-      ] },
-      { type: "text", text: "" },
-    ];
-    pushOutput(banner);
-  }, [booted, pushOutput]);
+  // stable id generator (refs only — empty deps)
+  const nextId = useCallback(() => ++idRef.current, []);
 
   // auto-scroll to bottom
   useEffect(() => {
@@ -215,7 +228,7 @@ export function Terminal() {
   const applyTheme = useCallback((next: Theme) => {
     setFading(true);
     window.setTimeout(() => {
-      setTheme(next);
+      setPrefs((p) => ({ ...p, theme: next }));
       savePref(LS_THEME, next);
       setFading(false);
     }, 200);
@@ -247,13 +260,13 @@ export function Terminal() {
       const crtMatch = cmd.match(/^crt\s+(\w+)/i);
       if (crtMatch) {
         const v = crtMatch[1].toLowerCase() === "on";
-        setCrt(v);
+        setPrefs((p) => ({ ...p, crt: v }));
         savePref(LS_CRT, v ? "true" : "false");
       }
       const soundMatch = cmd.match(/^sound\s+(\w+)/i);
       if (soundMatch) {
         const v = soundMatch[1].toLowerCase() === "on";
-        setSound(v);
+        setPrefs((p) => ({ ...p, sound: v }));
         savePref(LS_SOUND, v ? "true" : "false");
       }
 
